@@ -1,19 +1,27 @@
 [
   {
     "content": "Phase 2: Get design guidelines from design_agent",
-    "status": "in_progress"
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Install framer-motion dependency",
+    "status": "completed"
   },
   {
     "content": "Phase 2: Implement backend waitlist endpoint (FastAPI + MongoDB)",
-    "status": "pending"
+    "status": "completed"
   },
   {
     "content": "Phase 2: Implement landing page frontend (all sections)",
-    "status": "pending"
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Update index.html (fonts, title, meta tags)",
+    "status": "completed"
   },
   {
     "content": "Phase 2: End-to-end testing with testing_agent_v3",
-    "status": "pending"
+    "status": "in_progress"
   },
   {
     "content": "Phase 2: Fix any issues found in testing",
