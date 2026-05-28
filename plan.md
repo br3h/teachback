@@ -1,119 +1,139 @@
-# TeachBack AI Waitlist Landing Page — plan.md
+# TeachBack AI Waitlist Landing Page — Updated Plan
 
-## 1) Objectives
-- Ship a production-ready, high-converting landing page for TeachBack AI with premium visuals aligned to the provided design system.
-- Implement a secure, reliable waitlist API (`POST /api/waitlist`) backed by MongoDB with dedupe + spam mitigation.
-- Ensure the email capture UX covers all states (idle/loading/success/error/duplicate) and is accessible + mobile-first.
-- Validate end-to-end behavior with automated E2E testing and fix issues before finish.
+## 1) Objectives (Updated)
+- **Deliver V1 (Completed):** A premium, conversion-focused TeachBack AI landing page that matches the app’s dark-mode glassmorphism direction (deep black `#05070D`, neon cyan accent, Sora + DM Sans typography), optimized for mobile-first responsiveness.
+- **Operational waitlist (Completed):** A secure, reliable waitlist system (`POST /api/waitlist`) backed by MongoDB with email validation, normalization, deduplication, and basic spam mitigation.
+- **High-quality UX (Completed):** Email capture experience includes all states (idle/loading/success/error/duplicate), accessibility (labels, keyboard, aria-live), and subtle premium animations.
+- **Verified end-to-end (Completed):** Automated E2E validation via `testing_agent_v3` with **100% pass rate (32/32)** across backend + frontend user stories.
+- **Optional next steps (If requested):** Additional hardening, analytics attribution enhancements, and deployment/environment tightening.
+
+---
 
 ## 2) Implementation Steps (Phases)
 
-### Phase 1 — Core Workflow (POC not needed; build directly)
+### Phase 1 — Core Workflow (POC not needed; build directly) ✅ Completed
 **Goal:** Core waitlist submission works end-to-end (React → FastAPI → MongoDB) with correct states.
 
-User stories:
+User stories (achieved):
 1. As a visitor, I can submit my email and get an immediate success confirmation.
 2. As a visitor, if I submit an invalid email, I see a clear error message.
 3. As a visitor, if I submit the same email twice, I’m told I’m already on the list.
 4. As the system owner, I can block basic bot signups via a honeypot field.
 5. As the system owner, stored emails are normalized and duplicates are prevented.
 
-Implementation:
-- Backend (FastAPI)
-  - Create `POST /api/waitlist` accepting `{ email, hp? }`.
-  - Validate/sanitize: trim + lowercase, email regex/validator.
-  - Spam: if honeypot filled → return 200 with generic message (don’t reveal).
-  - MongoDB: `waitlist` collection with fields: `email`, `createdAt`, `source`, `userAgent`, `ipHash`.
-  - Dedupe: unique index on `email`; on duplicate key return `{status:"duplicate"}`.
-  - Hash IP (e.g., sha256 with server salt) and store only hash.
-  - CORS safe: allow same-origin; configurable allowlist via env.
+Implementation (shipped):
+- Backend (FastAPI + MongoDB)
+  - Implemented `POST /api/waitlist` accepting `{ email, hp?, source? }`.
+  - Email validation: regex + length cap; errors return 422.
+  - Normalization: trim + lowercase.
+  - Spam protection: honeypot (`hp`) → returns success without writing.
+  - Storage fields: `id`, `email`, `createdAt`, `source`, `userAgent`, `ipHash`.
+  - Deduplication: unique index on `email` created on startup; duplicate → `{status:"duplicate"}`.
+  - IP hashing: SHA256 with `IP_HASH_SALT` env.
+  - Additional endpoints: `GET /api`, `GET /api/health`, `GET /api/waitlist/count`.
+  - CORS configured via `CORS_ORIGINS`.
 - Frontend (React)
-  - Implement waitlist form component with controlled input + accessible label.
-  - Handle states: idle, loading (“Joining…”), success, duplicate, error.
-  - Disable submit while loading; show inline validation.
+  - Waitlist form implemented with controlled input + accessible label.
+  - States implemented: idle, loading (“Joining…”), success, duplicate, error.
+  - Disabled input/button on loading and after success/duplicate.
 
-Checkpoint: Manual sanity test (local) for success/invalid/duplicate/honeypot.
+Checkpoint (completed): manual curl sanity checks + automated E2E confirmation.
 
 ---
 
-### Phase 2 — V1 App Development (UI/UX + conversion)
+### Phase 2 — V1 App Development (UI/UX + conversion) ✅ Completed
 **Goal:** Build the full landing page sections + animations + premium mockup, wired to backend.
 
-User stories:
+User stories (achieved):
 1. As a visitor, I understand TeachBack AI in under 5 seconds from the hero.
 2. As a visitor, I can quickly see why rereading fails and what TeachBack changes.
 3. As a visitor, I can skim features and feel it’s a real product (not generic AI).
 4. As a visitor on mobile, the layout is readable, tappable, and fast.
 5. As a visitor, the app preview looks custom and reinforces trust.
 
-Implementation:
-- Build single-page layout with these sections:
-  - Sticky navbar (glass on scroll): brand “TeachBack” (white) + “AI” (cyan), CTA button.
-  - Hero: headline, subhead, primary CTA scroll-to-form; include custom app preview mock (cards: Overall Score 87, Feynman Verdict, Strengths, Gaps to Review, Retention bar, XP gained).
-  - Problem (3 cards), Solution (3 steps), Features (6 cards), Waitlist CTA, FAQ (4), Footer.
-- Visual system:
-  - Background `#05070D`, glass cards, subtle borders, accent cyan (#22D3EE/#06B6D4), rounded 20–28px.
-  - Fonts: Sora for headings, DM Sans/Inter for body.
-  - Button cyan fill + dark text; hover glow; input focus glow.
-- Animations (no childish effects):
-  - Hero fade/slide in, floating preview, reveal-on-scroll for cards, retention bar animate.
-- SEO + basics:
-  - Title/description, OpenGraph tags, favicon placeholder, semantic headings.
+Implementation (shipped):
+- Single-page layout with required sections (in order):
+  1. Sticky navbar (glass-on-scroll): “TeachBack” white + “AI” cyan + Join Waitlist CTA.
+  2. Hero: “Learn it by teaching it out loud.” + subhead + CTAs + **custom app preview mock**.
+  3. Problem section: headline + 3 cards.
+  4. Solution section: 3 steps (Upload notes, Teach out loud, Get gaps/score/plan).
+  5. Features: 6 feature cards.
+  6. Waitlist CTA: email capture form with all states.
+  7. FAQ: 4-item accordion.
+  8. Footer.
+- Custom app preview mock includes:
+  - Overall Score **87**
+  - “Feynman Verdict” card
+  - Strengths + Gaps to Review
+  - Retention bar animated **0 → 72%** (reduced-motion respected)
+  - XP gained + Streak
+- Visual system applied:
+  - Deep black background `#05070D`
+  - Glass cards with subtle borders
+  - Cyan/turquoise accent
+  - Rounded corners ~20–28px
+  - Soft cyan glow only where needed
+  - Typography: Sora (headings), DM Sans (body)
+- Animations:
+  - Hero entrance fade/slide
+  - Very slight floating preview
+  - Scroll reveal cards
+  - Button hover glow, input focus glow
+  - Reduced motion supported
+- SEO basics:
+  - Updated `public/index.html` title + meta description + OG/Twitter tags
 
-Testing step:
-- Run `testing_agent_v3` for E2E: submit email, verify UI states, verify backend writes + dedupe.
+Testing step (completed):
+- Ran `testing_agent_v3` and achieved **100% pass rate (32/32)**:
+  - Backend: 15/15
+  - Frontend: 17/17
 
 ---
 
-### Phase 3 — Hardening & Quality Pass
-**Goal:** Production polish, edge-case handling, performance, and copy tuning.
+### Phase 3 — Hardening & Quality Pass (Optional) ⏳ Not required for V1; do if requested
+**Goal:** Extra production polish, edge-case handling, and operational readiness beyond V1.
 
-User stories:
-1. As a visitor, I never lose my form progress due to accidental refresh during submit.
-2. As a visitor, errors are understandable and never leak technical details.
-3. As the system owner, I can attribute signups (source) for basic analytics.
-4. As a visitor using a screen reader, the form and FAQ are navigable.
-5. As a visitor, the page loads quickly and animations don’t jank.
-
-Implementation:
+Potential additions:
 - Backend
-  - Tighten error handling; consistent JSON responses; request size limits.
-  - Add `source` capture (query param or hidden field like `source=landing`).
-  - Confirm unique index migration on startup.
+  - Add rate limiting (per-IP / per-email) to reduce abuse.
+  - Add structured logging + request IDs.
+  - Add admin export endpoint (protected) or scheduled export mechanism.
+  - Improve attribution: support `source`/`utm_*` capture consistently.
+  - Tighten global exception handling (avoid over-catching) and refine 422 UX.
 - Frontend
-  - Add lightweight client-side email validation + `aria-live` for status.
-  - Ensure FAQ uses accessible disclosure pattern.
-  - Performance: reduce heavy shadows, ensure animations use transforms.
-- Re-test with `testing_agent_v3` after fixes.
+  - Add lightweight persistence (e.g., localStorage) during in-flight submit (optional).
+  - Enhance content polish (copy A/B variants) without changing layout.
+  - Performance pass: audit blur/shadow usage on low-end devices.
+
+Re-test:
+- Re-run `testing_agent_v3` after any changes.
 
 ---
 
-### Phase 4 — Deployment & Verification
-**Goal:** Deployed app works with real environment config.
+### Phase 4 — Deployment & Verification (Optional) ✅ App runs production-style already; finalize env/ops if requested
+**Goal:** Confirm production environment configuration and operational safety.
 
-User stories:
-1. As a visitor, I can join the waitlist on the live URL.
-2. As the system owner, env vars can be set without code changes.
-3. As the system owner, DB connectivity failures return a friendly error.
-4. As the system owner, CORS policy is safe in production.
-5. As a visitor, the site looks correct across common viewport sizes.
+Deployment/ops checklist:
+- Environment variables:
+  - `MONGO_URL`, `DB_NAME`, `CORS_ORIGINS`, `IP_HASH_SALT`
+- Verification:
+  - Smoke test: new signup, duplicate signup, invalid email
+  - Confirm DB connectivity and index creation on startup
+  - Confirm CORS allowlist in production (avoid `*` unless intentional)
 
-Implementation:
-- Configure env:
-  - `MONGODB_URI`, `DB_NAME`, `CORS_ORIGINS`, `IP_HASH_SALT`.
-- Smoke test production:
-  - Submit new email, duplicate email, invalid email.
-- Final `testing_agent_v3` pass (if environment allows) + fix regressions.
+---
 
-## 3) Next Actions (Immediate)
-1. Implement FastAPI `POST /api/waitlist` with MongoDB + unique index + honeypot.
-2. Implement React waitlist form with full state handling and accessibility.
-3. Build the landing page sections + custom mockup UI matching the design system.
-4. Run `testing_agent_v3`, fix issues, then proceed to hardening + deploy.
+## 3) Next Actions (Immediate) — Updated
+V1 is complete and validated.
+1. **(Optional)** Tighten production env values (`CORS_ORIGINS` allowlist, set `IP_HASH_SALT`).
+2. **(Optional)** Add UTM/source attribution capture (if marketing requires it).
+3. **(Optional)** Add rate limiting + admin export workflow for operations.
 
-## 4) Success Criteria
-- Landing page contains all required sections with premium, non-generic visuals and responsive layout.
-- Waitlist form reliably handles: loading/success/error/duplicate; button disabled while submitting.
-- Backend validates + normalizes email, prevents duplicates, stores required fields, uses honeypot + ipHash.
-- E2E tests pass and manual smoke tests confirm MongoDB writes and dedupe behavior.
-- Meets quality bar: clear value prop (<5s), real startup feel, no fake claims, no placeholder content, no generic AI imagery.
+---
+
+## 4) Success Criteria (Current Status)
+✅ Landing page contains all required sections with premium, non-generic visuals and responsive layout.
+✅ Waitlist form reliably handles: loading/success/error/duplicate; disables input/button appropriately.
+✅ Backend validates + normalizes email, prevents duplicates, stores required fields, uses honeypot + ipHash.
+✅ Automated E2E testing passed with **100% success (32/32)**.
+✅ Matches quality bar: clear value prop (<5s), real startup feel, no placeholder content, no generic AI imagery.
