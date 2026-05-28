@@ -86,12 +86,16 @@ class WaitlistAPITester:
             return False, 0
 
     def test_valid_new_email(self):
-        """Test POST /api/waitlist with valid new email"""
+        """Test POST /api/waitlist with valid new email + consent"""
         email = f"test-{self.timestamp}@teachback.test"
         try:
             response = requests.post(
                 f"{BASE_URL}/waitlist",
-                json={"email": email, "source": "backend-test"},
+                json={
+                    "email": email,
+                    "consentAccepted": True,
+                    "source": "backend-test"
+                },
                 timeout=15
             )
             data = response.json()
@@ -101,13 +105,13 @@ class WaitlistAPITester:
                 "on the list" in data.get("message", "").lower()
             )
             self.log_test(
-                f"POST /api/waitlist - valid new email ({email})",
+                f"POST /api/waitlist - valid new email + consent ({email})",
                 passed,
                 f"Status: {response.status_code}, Response: {data}"
             )
             return passed, email
         except Exception as e:
-            self.log_test(f"POST /api/waitlist - valid new email ({email})", False, f"Error: {str(e)}")
+            self.log_test(f"POST /api/waitlist - valid new email + consent ({email})", False, f"Error: {str(e)}")
             return False, email
 
     def test_duplicate_email(self, email):
@@ -115,14 +119,18 @@ class WaitlistAPITester:
         try:
             response = requests.post(
                 f"{BASE_URL}/waitlist",
-                json={"email": email, "source": "backend-test"},
+                json={
+                    "email": email,
+                    "consentAccepted": True,
+                    "source": "backend-test"
+                },
                 timeout=15
             )
             data = response.json()
             passed = (
                 response.status_code == 200 and
                 data.get("status") == "duplicate" and
-                "already on the list" in data.get("message", "").lower()
+                "already on the" in data.get("message", "").lower()
             )
             self.log_test(
                 f"POST /api/waitlist - duplicate email ({email})",
@@ -172,6 +180,133 @@ class WaitlistAPITester:
         
         return all_passed
 
+    def test_consent_required(self):
+        """Test POST /api/waitlist without consent - should return 400"""
+        email = f"no-consent-{self.timestamp}@teachback.test"
+        
+        # Test with consentAccepted=false
+        try:
+            response = requests.post(
+                f"{BASE_URL}/waitlist",
+                json={"email": email, "consentAccepted": False, "source": "backend-test"},
+                timeout=15
+            )
+            data = response.json()
+            passed = (
+                response.status_code == 400 and
+                ("privacy" in data.get("detail", "").lower() or
+                 "terms" in data.get("detail", "").lower() or
+                 "compliance" in data.get("detail", "").lower())
+            )
+            self.log_test(
+                f"POST /api/waitlist - consent=false returns 400 ({email})",
+                passed,
+                f"Status: {response.status_code}, Response: {data}"
+            )
+            result1 = passed
+        except Exception as e:
+            self.log_test(f"POST /api/waitlist - consent=false returns 400 ({email})", False, f"Error: {str(e)}")
+            result1 = False
+        
+        # Test with consent omitted
+        email2 = f"no-consent-2-{self.timestamp}@teachback.test"
+        try:
+            response = requests.post(
+                f"{BASE_URL}/waitlist",
+                json={"email": email2, "source": "backend-test"},
+                timeout=15
+            )
+            data = response.json()
+            passed = (
+                response.status_code == 400 and
+                ("privacy" in data.get("detail", "").lower() or
+                 "terms" in data.get("detail", "").lower() or
+                 "compliance" in data.get("detail", "").lower())
+            )
+            self.log_test(
+                f"POST /api/waitlist - consent omitted returns 400 ({email2})",
+                passed,
+                f"Status: {response.status_code}, Response: {data}"
+            )
+            result2 = passed
+        except Exception as e:
+            self.log_test(f"POST /api/waitlist - consent omitted returns 400 ({email2})", False, f"Error: {str(e)}")
+            result2 = False
+        
+        return result1 and result2
+
+    def test_personalization_fields(self):
+        """Test POST /api/waitlist with persona/mainGoal/subject"""
+        email = f"personalized-{self.timestamp}@teachback.test"
+        
+        try:
+            response = requests.post(
+                f"{BASE_URL}/waitlist",
+                json={
+                    "email": email,
+                    "consentAccepted": True,
+                    "persona": "student",
+                    "mainGoal": "exam-prep",
+                    "subject": "biology",
+                    "source": "backend-test"
+                },
+                timeout=15
+            )
+            data = response.json()
+            passed = response.status_code == 200 and data.get("status") == "success"
+            self.log_test(
+                f"POST /api/waitlist - with persona/mainGoal/subject ({email})",
+                passed,
+                f"Status: {response.status_code}, Response: {data}"
+            )
+            return passed
+        except Exception as e:
+            self.log_test(f"POST /api/waitlist - with persona/mainGoal/subject ({email})", False, f"Error: {str(e)}")
+            return False
+
+    def test_unknown_persona_cleared(self):
+        """Test POST /api/waitlist with unknown persona - should silently clear it"""
+        email = f"unknown-persona-{self.timestamp}@teachback.test"
+        
+        try:
+            response = requests.post(
+                f"{BASE_URL}/waitlist",
+                json={
+                    "email": email,
+                    "consentAccepted": True,
+                    "persona": "unknown-role",
+                    "source": "backend-test"
+                },
+                timeout=15
+            )
+            data = response.json()
+            # Should still return 200 success (silently cleared)
+            passed = response.status_code == 200 and data.get("status") == "success"
+            self.log_test(
+                f"POST /api/waitlist - unknown persona silently cleared ({email})",
+                passed,
+                f"Status: {response.status_code}, Response: {data}"
+            )
+            return passed
+        except Exception as e:
+            self.log_test(f"POST /api/waitlist - unknown persona silently cleared ({email})", False, f"Error: {str(e)}")
+            return False
+
+    def test_export_endpoint_no_admin_token(self):
+        """Test GET /api/waitlist/export without ADMIN_TOKEN - should return 404"""
+        try:
+            response = requests.get(f"{BASE_URL}/waitlist/export", timeout=10)
+            passed = response.status_code == 404
+            self.log_test(
+                "GET /api/waitlist/export - no admin token returns 404",
+                passed,
+                f"Status: {response.status_code} (expected 404)"
+            )
+            return passed
+        except Exception as e:
+            self.log_test("GET /api/waitlist/export - no admin token returns 404", False, f"Error: {str(e)}")
+            return False
+
     def test_email_normalization(self):
         """Test email normalization - spaces and case"""
         base_email = f"normalize-{self.timestamp}@teachback.test"
@@ -181,7 +316,11 @@ class WaitlistAPITester:
         try:
             response1 = requests.post(
                 f"{BASE_URL}/waitlist",
-                json={"email": email_with_spaces, "source": "backend-test"},
+                json={
+                    "email": email_with_spaces,
+                    "consentAccepted": True,
+                    "source": "backend-test"
+                },
                 timeout=15
             )
             data1 = response1.json()
@@ -196,7 +335,11 @@ class WaitlistAPITester:
             time.sleep(0.5)  # Small delay
             response2 = requests.post(
                 f"{BASE_URL}/waitlist",
-                json={"email": base_email, "source": "backend-test"},
+                json={
+                    "email": base_email,
+                    "consentAccepted": True,
+                    "source": "backend-test"
+                },
                 timeout=15
             )
             data2 = response2.json()
@@ -224,7 +367,12 @@ class WaitlistAPITester:
             # Submit with honeypot filled
             response = requests.post(
                 f"{BASE_URL}/waitlist",
-                json={"email": email, "hp": "bot-filled-this", "source": "backend-test"},
+                json={
+                    "email": email,
+                    "consentAccepted": True,
+                    "hp": "bot-filled-this",
+                    "source": "backend-test"
+                },
                 timeout=15
             )
             data = response.json()
@@ -263,7 +411,11 @@ class WaitlistAPITester:
             email = f"count-test-{self.timestamp}@teachback.test"
             response = requests.post(
                 f"{BASE_URL}/waitlist",
-                json={"email": email, "source": "backend-test"},
+                json={
+                    "email": email,
+                    "consentAccepted": True,
+                    "source": "backend-test"
+                },
                 timeout=15
             )
             
@@ -288,7 +440,7 @@ class WaitlistAPITester:
     def run_all_tests(self):
         """Run all backend tests"""
         print("=" * 70)
-        print("TeachBack AI Waitlist - Backend API Tests")
+        print("TeachBack AI Waitlist - Backend API Tests (Phase 2)")
         print(f"Base URL: {BASE_URL}")
         print(f"Test Run: {self.timestamp}")
         print("=" * 70)
@@ -308,7 +460,7 @@ class WaitlistAPITester:
         # Test waitlist functionality
         print("📝 Testing Waitlist Functionality...")
         
-        # Valid new email
+        # Valid new email with consent
         valid_passed, test_email = self.test_valid_new_email()
         
         # Duplicate email
@@ -318,6 +470,24 @@ class WaitlistAPITester:
         
         # Invalid emails
         self.test_invalid_emails()
+        
+        print()
+        print("🔒 Testing Phase 2 Consent & Personalization...")
+        
+        # Consent required (Phase 2)
+        self.test_consent_required()
+        
+        # Personalization fields (Phase 2)
+        self.test_personalization_fields()
+        
+        # Unknown persona cleared (Phase 2)
+        self.test_unknown_persona_cleared()
+        
+        # Export endpoint without admin token (Phase 2)
+        self.test_export_endpoint_no_admin_token()
+        
+        print()
+        print("🧪 Testing Edge Cases...")
         
         # Email normalization
         self.test_email_normalization()

@@ -1,30 +1,46 @@
 [
   {
-    "content": "Phase 2: Get design guidelines from design_agent",
+    "content": "Inspect current backend & frontend implementation",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Install framer-motion dependency",
+    "content": "Update backend: extend waitlist schema with persona/mainGoal/subject/consent fields + reject if no consent",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Implement backend waitlist endpoint (FastAPI + MongoDB)",
+    "content": "Add hero iPad + Apple Pencil composition next to phone (preserve current phone)",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Implement landing page frontend (all sections)",
+    "content": "Add Interactive Personalization section (Study Mode + Subject + Persona)",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Update index.html (fonts, title, meta tags)",
+    "content": "Add Mini Demo / Live Preview section tied to selections",
     "status": "completed"
   },
   {
-    "content": "Phase 2: End-to-end testing with testing_agent_v3 (32/32 passed)",
+    "content": "Update Waitlist form: persona/mainGoal/subject + consent checkbox + .dev emails",
     "status": "completed"
   },
   {
-    "content": "Phase 2: All user stories covered in Development and testing",
+    "content": "Create /privacy, /terms, /data-compliance pages + routes",
     "status": "completed"
+  },
+  {
+    "content": "Update Footer with .dev emails + legal links",
+    "status": "completed"
+  },
+  {
+    "content": "Update copy: 'Find your gaps before the test does.' headline + new microcopy",
+    "status": "completed"
+  },
+  {
+    "content": "E2E testing with testing_agent_v3",
+    "status": "in_progress"
+  },
+  {
+    "content": "Fix any issues from testing",
+    "status": "pending"
   }
 ]

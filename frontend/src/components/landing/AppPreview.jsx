@@ -6,50 +6,60 @@ import {
   TrendingUp,
   Flame,
   Sparkles,
+  Mic,
 } from "lucide-react";
+import { usePersonalization } from "@/context/PersonalizationContext";
 
 /**
- * AppPreview — Custom, believable mobile-app screenshot built from UI.
- * NOT a stock image. NOT a generic dashboard.
+ * AppPreview — Custom mobile-app screenshot built from UI.
+ * Reflects the selected subject from PersonalizationContext.
  */
-export default function AppPreview() {
+export default function AppPreview({ size = "md" }) {
   const reduce = useReducedMotion();
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true, amount: 0.3 });
-  const [retention, setRetention] = useState(0);
+  const inView = useInView(ref, { once: false, amount: 0.25 });
+  const { selections } = usePersonalization();
+  const subject = selections.subject;
 
+  // Animated retention bar (re-animates on subject change for liveness)
+  const target = 72;
+  const [retention, setRetention] = useState(reduce ? target : 0);
   useEffect(() => {
     if (!inView) return;
     if (reduce) {
-      setRetention(72);
+      setRetention(target);
       return;
     }
-    const target = 72;
+    setRetention(0);
     const start = performance.now();
     const duration = 900;
     let raf;
     const tick = (now) => {
       const t = Math.min(1, (now - start) / duration);
-      // easeOutCubic
       const eased = 1 - Math.pow(1 - t, 3);
       setRetention(Math.round(eased * target));
       if (t < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [inView, reduce]);
+  }, [inView, reduce, subject?.id]);
+
+  // Dimensions per size variant
+  const dims = size === "sm"
+    ? { w: "w-[260px] sm:w-[280px]", radius: "rounded-[40px]", screenRadius: "rounded-[34px]" }
+    : { w: "w-[280px] sm:w-[300px]", radius: "rounded-[44px]", screenRadius: "rounded-[38px]" };
 
   return (
     <div
       ref={ref}
       className="relative"
       data-testid="app-preview"
-      aria-label="TeachBack AI app preview"
+      aria-label="TeachBack AI phone preview"
     >
       {/* Soft glow behind device */}
       <div
         aria-hidden="true"
-        className="absolute -inset-8 -z-10 rounded-[60px] blur-3xl opacity-60"
+        className="absolute -inset-6 -z-10 rounded-[60px] blur-3xl opacity-60"
         style={{
           background:
             "radial-gradient(closest-side, rgba(0,229,255,0.18), transparent 70%)",
@@ -59,7 +69,7 @@ export default function AppPreview() {
       {/* Device frame */}
       <div className={`${reduce ? "" : "tb-float"} mx-auto`}>
         <div
-          className="relative w-[300px] sm:w-[330px] rounded-[44px] border border-white/10 p-[6px]"
+          className={`relative ${dims.w} ${dims.radius} border border-white/10 p-[6px]`}
           style={{
             background:
               "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
@@ -68,7 +78,7 @@ export default function AppPreview() {
           }}
         >
           {/* Screen */}
-          <div className="relative overflow-hidden rounded-[38px] bg-[#05070D] aspect-[9/19]">
+          <div className={`relative overflow-hidden ${dims.screenRadius} bg-[#05070D] aspect-[9/19]`}>
             {/* Subtle radial inside screen */}
             <div
               aria-hidden="true"
@@ -79,7 +89,7 @@ export default function AppPreview() {
               }}
             />
             {/* Notch */}
-            <div className="absolute left-1/2 top-2 -translate-x-1/2 h-5 w-[88px] rounded-full bg-black/80 border border-white/5" />
+            <div className="absolute left-1/2 top-2 -translate-x-1/2 h-4 w-[78px] rounded-full bg-black/80 border border-white/5" />
 
             {/* Status row */}
             <div className="relative z-10 flex items-center justify-between px-5 pt-3 text-[10px] text-white/70 font-medium">
@@ -97,8 +107,11 @@ export default function AppPreview() {
               <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">
                 Session Results
               </p>
-              <h3 className="mt-1 font-heading text-[15px] font-semibold text-white">
-                Cell Biology · Mitosis
+              <h3
+                className="mt-1 font-heading text-[14px] sm:text-[15px] font-semibold text-white truncate"
+                data-testid="app-preview-subject"
+              >
+                {subject?.topic || "Cell Biology · Mitosis"}
               </h3>
             </div>
 
@@ -110,7 +123,7 @@ export default function AppPreview() {
                     Overall Score
                   </p>
                   <div className="mt-1 flex items-baseline gap-1">
-                    <span className="font-heading text-[40px] leading-none font-bold text-white">
+                    <span className="font-heading text-[36px] sm:text-[40px] leading-none font-bold text-white">
                       87
                     </span>
                     <span className="text-white/45 text-sm">/ 100</span>
@@ -147,13 +160,8 @@ export default function AppPreview() {
             <div className="relative z-10 mx-5 mt-3 grid grid-cols-2 gap-2.5">
               <div className="rounded-2xl border border-white/10 bg-[rgba(10,16,28,0.55)] p-3">
                 <div className="flex items-center gap-1.5">
-                  <CheckCircle2
-                    className="h-3.5 w-3.5 text-[#2AF6D6]"
-                    aria-hidden="true"
-                  />
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-white/55">
-                    Strengths
-                  </p>
+                  <CheckCircle2 className="h-3.5 w-3.5 text-[#2AF6D6]" aria-hidden="true" />
+                  <p className="text-[10px] uppercase tracking-[0.1em] text-white/55">Strengths</p>
                 </div>
                 <ul className="mt-1.5 space-y-1 text-[11px] text-white/80">
                   <li>Core idea explained</li>
@@ -163,13 +171,8 @@ export default function AppPreview() {
               </div>
               <div className="rounded-2xl border border-white/10 bg-[rgba(10,16,28,0.55)] p-3">
                 <div className="flex items-center gap-1.5">
-                  <AlertTriangle
-                    className="h-3.5 w-3.5 text-[#F7C948]"
-                    aria-hidden="true"
-                  />
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-white/55">
-                    Gaps to Review
-                  </p>
+                  <AlertTriangle className="h-3.5 w-3.5 text-[#F7C948]" aria-hidden="true" />
+                  <p className="text-[10px] uppercase tracking-[0.1em] text-white/55">Gaps</p>
                 </div>
                 <ul className="mt-1.5 space-y-1 text-[11px] text-white/80">
                   <li>Limiting case skipped</li>
@@ -204,8 +207,7 @@ export default function AppPreview() {
                   className="h-full rounded-full"
                   style={{
                     width: `${retention}%`,
-                    background:
-                      "linear-gradient(90deg, #00E5FF 0%, #2AF6D6 100%)",
+                    background: "linear-gradient(90deg, #00E5FF 0%, #2AF6D6 100%)",
                     boxShadow: "0 0 12px rgba(0,229,255,0.5)",
                     transition: "width 80ms linear",
                   }}
@@ -213,7 +215,7 @@ export default function AppPreview() {
               </div>
             </div>
 
-            {/* XP / Streak */}
+            {/* XP / Streak / listening pulse */}
             <div className="relative z-10 mx-5 mt-3 mb-4 flex items-center justify-between rounded-2xl border border-white/10 bg-[rgba(10,16,28,0.55)] px-3 py-2">
               <div className="flex items-center gap-2">
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[rgba(0,229,255,0.3)] bg-[rgba(0,229,255,0.1)] text-[#00E5FF] text-[10px] font-semibold">
@@ -221,20 +223,39 @@ export default function AppPreview() {
                 </span>
                 <div>
                   <p className="text-[11px] font-semibold text-white">+120</p>
-                  <p className="text-[9px] uppercase tracking-wider text-white/45">
-                    earned
-                  </p>
+                  <p className="text-[9px] uppercase tracking-wider text-white/45">earned</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Flame className="h-4 w-4 text-[#F7C948]" aria-hidden="true" />
                 <div className="text-right">
                   <p className="text-[11px] font-semibold text-white">5 days</p>
-                  <p className="text-[9px] uppercase tracking-wider text-white/45">
-                    streak
-                  </p>
+                  <p className="text-[9px] uppercase tracking-wider text-white/45">streak</p>
                 </div>
               </div>
+            </div>
+
+            {/* Floating listening pulse pill */}
+            <div
+              aria-hidden="true"
+              className="absolute right-3 top-12 flex items-center gap-1 rounded-full border border-[rgba(0,229,255,0.3)] bg-[rgba(0,229,255,0.1)] px-1.5 py-0.5 backdrop-blur"
+            >
+              <Mic className="h-3 w-3 text-[#00E5FF]" />
+              <span className="flex items-end gap-[2px]">
+                <span className="block w-[2px] h-2 rounded-sm bg-[#00E5FF]/80 animate-pulse" />
+                <span
+                  className="block w-[2px] h-3 rounded-sm bg-[#00E5FF]/80 animate-pulse"
+                  style={{ animationDelay: "120ms" }}
+                />
+                <span
+                  className="block w-[2px] h-1.5 rounded-sm bg-[#00E5FF]/80 animate-pulse"
+                  style={{ animationDelay: "240ms" }}
+                />
+                <span
+                  className="block w-[2px] h-2.5 rounded-sm bg-[#00E5FF]/80 animate-pulse"
+                  style={{ animationDelay: "360ms" }}
+                />
+              </span>
             </div>
           </div>
         </div>

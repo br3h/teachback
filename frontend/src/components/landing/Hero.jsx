@@ -1,14 +1,47 @@
+import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import AppPreview from "@/components/landing/AppPreview";
+import IpadPreview from "@/components/landing/IpadPreview";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function Hero() {
   const reduce = useReducedMotion();
+  const sceneRef = useRef(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+
   const scrollTo = (id) => () => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  // Very subtle pointer parallax over the device composition (desktop only).
+  useEffect(() => {
+    if (reduce) return;
+    const node = sceneRef.current;
+    if (!node) return;
+    if (window.matchMedia("(max-width: 1023px)").matches) return;
+
+    const onMove = (e) => {
+      const rect = node.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = (e.clientX - cx) / rect.width;
+      const dy = (e.clientY - cy) / rect.height;
+      // Clamp to small ranges
+      setTilt({
+        x: Math.max(-1, Math.min(1, dy)) * -2.2,
+        y: Math.max(-1, Math.min(1, dx)) * 2.2,
+      });
+    };
+    const onLeave = () => setTilt({ x: 0, y: 0 });
+    node.addEventListener("mousemove", onMove);
+    node.addEventListener("mouseleave", onLeave);
+    return () => {
+      node.removeEventListener("mousemove", onMove);
+      node.removeEventListener("mouseleave", onLeave);
+    };
+  }, [reduce]);
 
   return (
     <section
@@ -16,14 +49,14 @@ export default function Hero() {
       className="relative hero-bg noise-overlay overflow-hidden"
       data-testid="hero-section"
     >
-      <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-12 sm:pt-16 lg:pt-24 pb-14 sm:pb-20 lg:pb-28">
+      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-12 sm:pt-16 lg:pt-24 pb-14 sm:pb-20 lg:pb-28">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
           {/* LEFT: copy */}
           <motion.div
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14 }}
             animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            className="lg:col-span-7"
+            className="lg:col-span-6"
           >
             <div
               className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(10,16,28,0.55)] px-3 py-1.5 text-xs text-soft"
@@ -93,14 +126,56 @@ export default function Hero() {
             </div>
           </motion.div>
 
-          {/* RIGHT: app preview */}
+          {/* RIGHT: device composition (iPad + Pencil + Phone) */}
           <motion.div
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: 18 }}
             animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}
-            className="lg:col-span-5 flex justify-center lg:justify-end"
+            className="lg:col-span-6 flex justify-center lg:justify-end"
+            data-testid="hero-devices"
           >
-            <AppPreview />
+            <div
+              ref={sceneRef}
+              className="relative w-full max-w-[640px]"
+              style={{
+                perspective: "1400px",
+              }}
+            >
+              <div
+                className="relative h-[460px] sm:h-[520px] lg:h-[560px]"
+                style={{
+                  transformStyle: "preserve-3d",
+                  transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+                  transition: "transform 240ms ease-out",
+                }}
+              >
+                {/* iPad placed behind, rotated slightly */}
+                <div
+                  className="absolute left-0 top-10 sm:top-14 lg:top-16 hidden sm:block"
+                  style={{
+                    transform: "rotate(-4deg)",
+                    transformOrigin: "center center",
+                  }}
+                  data-testid="hero-ipad"
+                >
+                  <IpadPreview />
+                </div>
+
+                {/* Phone in front-right */}
+                <div
+                  className="absolute right-0 -bottom-4 sm:right-2 sm:bottom-0 lg:right-0 lg:-bottom-2 z-20"
+                  style={{ transform: "rotate(2deg)" }}
+                  data-testid="hero-phone"
+                >
+                  <AppPreview size="sm" />
+                </div>
+
+                {/* Mobile fallback: show only phone centered on very small screens */}
+                <div className="sm:hidden absolute inset-0 flex items-center justify-center">
+                  {/* phone already absolutely positioned above; ensure no extra duplicates */}
+                </div>
+              </div>
+            </div>
           </motion.div>
         </div>
       </div>

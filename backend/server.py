@@ -7,11 +7,13 @@ from pymongo import ASCENDING
 from pymongo.errors import DuplicateKeyError
 import os
 import re
+import csv
+import io
 import hashlib
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_validator
-from typing import List, Optional
+from pydantic import BaseModel, Field, ConfigDict, field_validator
+from typing import List, Optional, Literal
 import uuid
 from datetime import datetime, timezone
 
@@ -26,9 +28,21 @@ db = client[os.environ['DB_NAME']]
 
 # IP hash salt (use env var, fallback only for dev)
 IP_HASH_SALT = os.environ.get('IP_HASH_SALT', 'teachback-default-salt-change-me')
+# Optional admin token to protect waitlist export endpoint
+ADMIN_TOKEN = os.environ.get('ADMIN_TOKEN', '')
+
+# Current consent version
+CONSENT_VERSION_CURRENT = "v1.0"
+
+# Allowed personalization values (kept loose by default; we validate length/whitelist)
+ALLOWED_PERSONAS = {"student", "parent", "tutor", ""}
+ALLOWED_GOALS = {"exam-prep", "homework-help", "notes-review", "last-minute", ""}
+ALLOWED_SUBJECTS = {
+    "biology", "chemistry", "physics", "math", "history", "english", "other", ""
+}
 
 # Create the main app without a prefix
-app = FastAPI(title="TeachBack AI Waitlist API", version="1.0.0")
+app = FastAPI(title="TeachBack AI Waitlist API", version="1.1.0")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -54,10 +68,32 @@ EMAIL_REGEX = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 MAX_EMAIL_LENGTH = 254  # RFC 5321
 
 
+def _norm_choice(v: Optional[str], allowed: set, max_len: int = 40) -> str:
+    """Trim, lowercase, validate against an allow-list."""
+    if v is None:
+        return ""
+    if not isinstance(v, str):
+        raise ValueError("Invalid value")
+    s = v.strip().lower()
+    if len(s) > max_len:
+        raise ValueError("Value is too long")
+    if s and s not in allowed:
+        # Don't crash hard — just clear it. Keeps form forgiving.
+        return ""
+    return s
+
+
 class WaitlistCreate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     email: str
+    # Optional personalization fields
+    persona: Optional[str] = Field(default="", max_length=40)
+    mainGoal: Optional[str] = Field(default="", max_length=40)
+    subject: Optional[str] = Field(default="", max_length=40)
+    # Consent
+    consentAccepted: bool = False
+    consentVersion: Optional[str] = Field(default=CONSENT_VERSION_CURRENT, max_length=20)
     # Honeypot field - bots will fill it. Humans should leave it empty.
     hp: Optional[str] = Field(default=None, max_length=200)
     source: Optional[str] = Field(default="landing-page", max_length=80)
@@ -76,20 +112,50 @@ class WaitlistCreate(BaseModel):
             raise ValueError("Please enter a valid email address")
         return v
 
+    @field_validator("persona")
+    @classmethod
+    def v_persona(cls, v):
+        return _norm_choice(v, ALLOWED_PERSONAS)
+
+    @field_validator("mainGoal")
+    @classmethod
+    def v_goal(cls, v):
+        return _norm_choice(v, ALLOWED_GOALS)
+
+    @field_validator("subject")
+    @classmethod
+    def v_subject(cls, v):
+        return _norm_choice(v, ALLOWED_SUBJECTS)
+
+    @field_validator("consentVersion")
+    @classmethod
+    def v_consent_version(cls, v):
+        if v is None:
+            return CONSENT_VERSION_CURRENT
+        v = str(v).strip()
+        return v[:20] if v else CONSENT_VERSION_CURRENT
+
 
 class WaitlistEntry(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     email: str
-    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    persona: str = ""
+    mainGoal: str = ""
+    subject: str = ""
     source: str = "landing-page"
+    status: str = "joined"
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    consentAccepted: bool = True
+    consentVersion: str = CONSENT_VERSION_CURRENT
+    consentTimestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     userAgent: Optional[str] = None
     ipHash: Optional[str] = None
 
 
 class WaitlistResponse(BaseModel):
-    status: str  # "success" | "duplicate"
+    status: Literal["success", "duplicate"]
     message: str
 
 # ---------------------------------------------------------------------------
@@ -115,6 +181,15 @@ def _client_ip(request: Request) -> Optional[str]:
     if request.client:
         return request.client.host
     return None
+
+
+def _require_admin(request: Request) -> None:
+    if not ADMIN_TOKEN:
+        # If no admin token is configured, treat the export route as disabled.
+        raise HTTPException(status_code=404, detail="Not found")
+    provided = request.headers.get("x-admin-token", "")
+    if provided != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -158,13 +233,18 @@ async def get_status_checks():
 async def join_waitlist(payload: WaitlistCreate, request: Request):
     """Add an email to the TeachBack AI waitlist.
 
+    Required:
+        - email (validated + normalized to lowercase)
+        - consentAccepted = True
+
+    Optional:
+        - persona, mainGoal, subject (validated against allow-lists)
+        - source
+        - hp (honeypot)
+
     Returns:
         - status "success" when newly added
         - status "duplicate" when already on the list
-
-    Spam protection:
-        - Honeypot field ("hp"): bots usually fill it. We silently treat as success.
-        - Email is validated, normalized, and deduplicated via a unique index.
     """
     # Honeypot: pretend success without writing
     if payload.hp:
@@ -174,23 +254,42 @@ async def join_waitlist(payload: WaitlistCreate, request: Request):
             message="You're on the list. We'll email you when early access opens.",
         )
 
+    # Consent is required
+    if not payload.consentAccepted:
+        raise HTTPException(
+            status_code=400,
+            detail="Please accept the Privacy Policy, Terms, and Data & Compliance Notice to join the waitlist.",
+        )
+
     user_agent = (request.headers.get("user-agent") or "")[:512] or None
     ip = _client_ip(request)
     ip_hash = _hash_ip(ip)
+    now = datetime.now(timezone.utc)
 
     entry = WaitlistEntry(
         email=payload.email,
+        persona=payload.persona or "",
+        mainGoal=payload.mainGoal or "",
+        subject=payload.subject or "",
         source=(payload.source or "landing-page")[:80],
+        consentAccepted=True,
+        consentVersion=payload.consentVersion or CONSENT_VERSION_CURRENT,
+        consentTimestamp=now,
+        createdAt=now,
         userAgent=user_agent,
         ipHash=ip_hash,
     )
     doc = entry.model_dump()
-    # MongoDB-friendly datetime
+    # MongoDB-friendly datetime strings
     doc["createdAt"] = doc["createdAt"].isoformat()
+    doc["consentTimestamp"] = doc["consentTimestamp"].isoformat()
 
     try:
         await db.waitlist.insert_one(doc)
-        logger.info("Waitlist signup: %s (source=%s)", entry.email, entry.source)
+        logger.info(
+            "Waitlist signup: %s (persona=%s goal=%s subject=%s)",
+            entry.email, entry.persona, entry.mainGoal, entry.subject,
+        )
         return WaitlistResponse(
             status="success",
             message="You're on the list. We'll email you when early access opens.",
@@ -198,8 +297,10 @@ async def join_waitlist(payload: WaitlistCreate, request: Request):
     except DuplicateKeyError:
         return WaitlistResponse(
             status="duplicate",
-            message="You're already on the list. We'll be in touch soon.",
+            message="You're already on the waitlist. We'll email you when early access opens.",
         )
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to insert waitlist entry: %s", exc)
         raise HTTPException(status_code=500, detail="Something went wrong. Please try again.")
@@ -207,13 +308,49 @@ async def join_waitlist(payload: WaitlistCreate, request: Request):
 
 @api_router.get("/waitlist/count")
 async def waitlist_count():
-    """Optional internal counter - returns total waitlist signups."""
+    """Public counter — returns total waitlist signups."""
     try:
         count = await db.waitlist.count_documents({})
         return {"count": count}
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to count waitlist: %s", exc)
         raise HTTPException(status_code=500, detail="Unable to fetch count")
+
+
+@api_router.get("/waitlist/export")
+async def waitlist_export(request: Request):
+    """Admin-only CSV export.
+
+    Requires an `x-admin-token` header that matches the `ADMIN_TOKEN`
+    environment variable. If the variable is not configured, the endpoint
+    responds as 404 (effectively disabled).
+    """
+    _require_admin(request)
+    try:
+        cursor = db.waitlist.find({}, {"_id": 0}).sort("createdAt", ASCENDING)
+        rows = await cursor.to_list(length=100000)
+        # Build CSV in memory
+        fieldnames = [
+            "createdAt", "email", "persona", "mainGoal", "subject",
+            "source", "status", "consentVersion", "consentTimestamp",
+            "userAgent", "ipHash", "id",
+        ]
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: r.get(k, "") for k in fieldnames})
+        from fastapi.responses import Response
+        return Response(
+            content=buf.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=teachback_waitlist.csv"},
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to export waitlist: %s", exc)
+        raise HTTPException(status_code=500, detail="Unable to export")
 
 
 # Include the router in the main app
