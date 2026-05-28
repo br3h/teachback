@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="TeachBack AI mark">
+  <title>TeachBack AI</title>
+  <desc>The TeachBack AI mark: a rounded square with three cyan horizontal lines representing notes.</desc>
+  <!-- Rounded square ring -->
+  <rect x="3" y="3" width="58" height="58" rx="16" ry="16"
+        fill="rgba(0,229,255,0.06)"
+        stroke="#00E5FF"
+        stroke-opacity="0.55"
+        stroke-width="1.5" />
+  <!-- Three horizontal cyan lines (notes mark), proportions matching the in-app icon (M4 6h16 M4 12h12 M4 18h8 scaled) -->
+  <g stroke="#00E5FF" stroke-width="5" stroke-linecap="round" fill="none">
+    <line x1="15" y1="22" x2="45" y2="22" />
+    <line x1="15" y1="32" x2="38" y2="32" />
+    <line x1="15" y1="42" x2="30" y2="42" />
+  </g>
+</svg>
