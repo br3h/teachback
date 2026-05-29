@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ASCENDING
 from pymongo.errors import DuplicateKeyError
+import asyncio
 import os
 import re
 import csv
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Literal
 import uuid
 from datetime import datetime, timezone
+import httpx
 
 
 ROOT_DIR = Path(__file__).parent
@@ -30,6 +32,9 @@ db = client[os.environ['DB_NAME']]
 IP_HASH_SALT = os.environ.get('IP_HASH_SALT', 'teachback-default-salt-change-me')
 # Optional admin token to protect waitlist export endpoint
 ADMIN_TOKEN = os.environ.get('ADMIN_TOKEN', '')
+# Optional Make.com webhook URL for Google Sheets sync (server-side only \u2014
+# never exposed to the frontend)
+MAKE_WAITLIST_WEBHOOK_URL = os.environ.get('MAKE_WAITLIST_WEBHOOK_URL', '').strip()
 
 # Current consent version
 CONSENT_VERSION_CURRENT = "v1.0"
@@ -191,6 +196,39 @@ def _require_admin(request: Request) -> None:
     if provided != ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+
+async def _post_to_make_webhook(email: str, registered_at_iso: str) -> None:
+    """Send only {registeredAt, email} to the Make.com webhook.
+
+    Fire-and-forget: this is scheduled as a background task so the user's
+    waitlist response is never delayed. Failures are logged but never
+    surfaced to the client because the email is already safely stored in
+    the database.
+    """
+    if not MAKE_WAITLIST_WEBHOOK_URL:
+        return  # Integration disabled \u2014 no-op
+    payload = {
+        "registeredAt": registered_at_iso,
+        "email": email,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(
+                MAKE_WAITLIST_WEBHOOK_URL,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+        if 200 <= resp.status_code < 300:
+            logger.info("Make webhook sync OK for %s (status %s)", email, resp.status_code)
+        else:
+            logger.error(
+                "Make webhook sync FAILED for %s \u2014 status %s, body=%s",
+                email, resp.status_code, (resp.text or "")[:300],
+            )
+    except Exception as exc:  # noqa: BLE001
+        # Never propagate \u2014 the DB write already succeeded, the user gets success.
+        logger.exception("Make webhook sync raised an exception for %s: %s", email, exc)
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -290,6 +328,15 @@ async def join_waitlist(payload: WaitlistCreate, request: Request):
             "Waitlist signup: %s (persona=%s goal=%s subject=%s)",
             entry.email, entry.persona, entry.mainGoal, entry.subject,
         )
+        # Fire-and-forget: sync to Make.com -> Google Sheets.
+        # We do NOT await this so the user response is instant, and any
+        # failure here will never affect the success message they see.
+        try:
+            asyncio.create_task(
+                _post_to_make_webhook(entry.email, doc["createdAt"])
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Failed to schedule Make webhook task: %s", exc)
         return WaitlistResponse(
             status="success",
             message="You're on the list. We'll email you when early access opens.",
@@ -391,6 +438,16 @@ async def ensure_indexes():
         logger.info("Waitlist indexes ensured.")
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to ensure indexes: %s", exc)
+    if MAKE_WAITLIST_WEBHOOK_URL:
+        # Log only the host so the full URL is never written to logs in clear text
+        try:
+            from urllib.parse import urlparse
+            host = urlparse(MAKE_WAITLIST_WEBHOOK_URL).netloc or "configured"
+            logger.info("Make.com webhook sync ENABLED (host=%s)", host)
+        except Exception:  # noqa: BLE001
+            logger.info("Make.com webhook sync ENABLED")
+    else:
+        logger.info("Make.com webhook sync disabled (MAKE_WAITLIST_WEBHOOK_URL not set)")
 
 
 @app.on_event("shutdown")

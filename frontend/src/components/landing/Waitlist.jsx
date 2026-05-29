@@ -391,16 +391,18 @@ export default function Waitlist() {
                   </span>
                 )}
                 {status === "idle" && (
-                  <span className="inline-flex items-center gap-1.5 text-muted-soft">
-                    <ShieldCheck className="h-3.5 w-3.5 text-[#00E5FF]/80" />
-                    No spam. Just product updates and early access news from{" "}
-                    <a
-                      href="mailto:updates@teachback.dev"
-                      className="hover:text-[#00E5FF] transition-colors"
-                    >
-                      updates@teachback.dev
-                    </a>
-                    .
+                  <span className="inline-flex items-start gap-1.5 text-muted-soft">
+                    <ShieldCheck className="h-3.5 w-3.5 mt-0.5 text-[#00E5FF]/80 shrink-0" aria-hidden="true" />
+                    <span>
+                      No spam. Just product updates and early access news from{" "}
+                      <a
+                        href="mailto:updates@teachback.dev"
+                        className="hover:text-[#00E5FF] transition-colors break-words"
+                      >
+                        updates@teachback.dev
+                      </a>
+                      .
+                    </span>
                   </span>
                 )}
               </div>

@@ -437,10 +437,71 @@ class WaitlistAPITester:
             self.log_test("GET /api/waitlist/count - increments after signup", False, f"Error: {str(e)}")
             return False
 
+    def test_webhook_url_not_leaked(self):
+        """Test that webhook URL is never exposed in any API response"""
+        endpoints_to_check = [
+            ("/", "GET /api root"),
+            ("/health", "GET /api/health"),
+            ("/waitlist/count", "GET /api/waitlist/count"),
+        ]
+        
+        all_passed = True
+        for endpoint, name in endpoints_to_check:
+            try:
+                response = requests.get(f"{BASE_URL}{endpoint}", timeout=10)
+                response_text = response.text.lower()
+                
+                # Check for webhook URL patterns
+                leaked = (
+                    "make.com" in response_text or
+                    "webhook" in response_text or
+                    "hook.us2" in response_text
+                )
+                
+                passed = not leaked
+                self.log_test(
+                    f"{name} - webhook URL not leaked",
+                    passed,
+                    f"Status: {response.status_code}, Leaked: {leaked}"
+                )
+                if not passed:
+                    all_passed = False
+            except Exception as e:
+                self.log_test(f"{name} - webhook URL not leaked", False, f"Error: {str(e)}")
+                all_passed = False
+        
+        # Also check POST /api/waitlist response
+        email = f"leak-check-{self.timestamp}@teachback.test"
+        try:
+            response = requests.post(
+                f"{BASE_URL}/waitlist",
+                json={"email": email, "consentAccepted": True, "source": "backend-test"},
+                timeout=15
+            )
+            response_text = response.text.lower()
+            leaked = (
+                "make.com" in response_text or
+                "webhook" in response_text or
+                "hook.us2" in response_text
+            )
+            passed = not leaked
+            self.log_test(
+                "POST /api/waitlist - webhook URL not leaked in response",
+                passed,
+                f"Status: {response.status_code}, Leaked: {leaked}"
+            )
+            if not passed:
+                all_passed = False
+        except Exception as e:
+            self.log_test("POST /api/waitlist - webhook URL not leaked in response", False, f"Error: {str(e)}")
+            all_passed = False
+        
+        return all_passed
+
     def run_all_tests(self):
         """Run all backend tests"""
         print("=" * 70)
-        print("TeachBack AI Waitlist - Backend API Tests (Phase 2)")
+        print("TeachBack AI Waitlist - Backend API Tests (Phase 3)")
         print(f"Base URL: {BASE_URL}")
         print(f"Test Run: {self.timestamp}")
         print("=" * 70)
@@ -499,9 +560,23 @@ class WaitlistAPITester:
         self.test_count_increments()
         
         print()
+        print("🔐 Testing Phase 3 Webhook Security...")
+        
+        # Webhook URL not leaked
+        self.test_webhook_url_not_leaked()
+        
+        print()
         print("=" * 70)
         print(f"📊 Test Results: {self.tests_passed}/{self.tests_run} passed")
         print("=" * 70)
+        print()
+        print("⚠️  NOTE: Webhook firing to Make.com is tested via backend logs.")
+        print("    After a successful signup, check logs for:")
+        print("    1. 'Waitlist signup: <email>'")
+        print("    2. 'HTTP Request: POST https://hook.us2.make.com/...'")
+        print("    3. 'Make webhook sync FAILED for <email> — status 410'")
+        print("    The user should still receive success despite the 410.")
+        print()
         
         return self.tests_passed == self.tests_run
 
