@@ -80,3 +80,25 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/frontend/node_modules/.cache/default-development/0.pack
+
+# Environment secrets
+.env
+*.env
+frontend/.env
+backend/.env
+
+# Generated/test files
+test_reports/
+__pycache__/
+node_modules/
+
+# Secrets
+.env
+*.env
+frontend/.env
+backend/.env
+
+# Junk
+node_modules/
+test_reports/
+__pycache__/
