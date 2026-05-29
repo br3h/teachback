@@ -21,11 +21,7 @@ import {
   DEFAULT_CTA,
 } from "@/context/PersonalizationContext";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
 const EMAIL_REGEX = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
-const CONSENT_VERSION = "v1.0";
 
 export default function Waitlist() {
   const reduce = useReducedMotion();
@@ -77,16 +73,9 @@ export default function Waitlist() {
 
     try {
       const res = await axios.post(
-        `${API}/waitlist`,
+        "/api/waitlist",
         {
           email: email.trim().toLowerCase(),
-          persona: persona || "",
-          mainGoal: studyMode || "",
-          subject: subject || "",
-          consentAccepted: true,
-          consentVersion: CONSENT_VERSION,
-          hp,
-          source: "landing-page",
         },
         { timeout: 15000 }
       );
